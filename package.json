@@ -1,0 +1,28 @@
+{
+  "name": "nuxt3-app",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.70",
+    "@ai-sdk/vue": "^3.0.99",
+    "@nuxtjs/tailwindcss": "6.14.0",
+    "ai": "^4.0.24",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.3",
+    "nuxt": "^4.3.1",
+    "vue": "^3.5.28",
+    "vue-router": "^4.6.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/highlight.js": "^10.1.0",
+    "@types/marked": "^6.0.0"
+  }
+}
