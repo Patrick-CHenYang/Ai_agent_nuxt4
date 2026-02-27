@@ -5,11 +5,12 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
-  renderKey?: number; // 用于强制重绘
+  _tick?: number;
+  // ✅ 新增：用于逐字渲染的字符数组
+  _charArray?: string[]; 
   toolInvocations?: any[]; 
   tool_call_id?: string;
 }
-
 export interface UseChatOptions {
   api: string;
   onError?: (err: Error) => void;
@@ -45,10 +46,19 @@ export function useChat(options: UseChatOptions) {
   // ✅ 核心函数：接收当前历史，返回新的历史
   const submitRequest = async (currentHistory: Message[], isToolResponse: boolean = false) => {
     
-    // 1. 准备要发送的消息列表 (直接复用传入的 history，确保顺序不变)
-    const msgsToSend = currentHistory.filter(m => m.role !== 'system');
+    // 🔑 关键：创建一个纯净的消息数组，只包含 API 需要的字段
+    // 过滤掉 _charArray, renderVersion 等前端专用字段
+    const cleanHistory = currentHistory.map(msg => {
+      const cleanMsg: any = {
+        role: msg.role,
+        content: msg.content,
+      };
+      if (msg.tool_call_id) cleanMsg.tool_call_id = msg.tool_call_id;
+      return cleanMsg;
+    });
 
-    // 如果不是工具回调（即用户手动发送），才处理输入框和创建新气泡
+    const msgsToSend = cleanHistory.filter(m => m.role !== 'system');
+
     if (!isToolResponse) {
       if (!input.value.trim() || isLoading.value) return;
 
@@ -58,44 +68,39 @@ export function useChat(options: UseChatOptions) {
         content: input.value,
       };
       
-      // 创建助手消息占位
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',
         toolInvocations: [],
-        renderKey: 0
+        renderVersion: 0
       };
 
-      // ✅ 关键：先更新 UI (push 到 messages.value)
       messages.value.push(userMessage, assistantMessage);
       input.value = '';
       
-      // ✅ 关键：构造新的历史数组用于发送 (包含刚才 push 的两条)
+      // ✅ 使用纯净的 cleanHistory 构造新历史
       const newHistory = [
-        ...currentHistory, 
+        ...cleanHistory, 
         userMessage, 
         assistantMessage
       ];
       
-      // 使用新历史发起请求
       await executeFetch(newHistory, assistantMessage, false);
 
     } else {
-      // --- 工具回调模式 ---
-      // 此时 currentHistory 已经包含了 User -> Assistant(tool_calls) -> Tool(result)
-      // 我们只需要创建一个新的助手气泡用于接收回复
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',
         toolInvocations: [],
-        renderKey: 0
+        renderVersion: 0
       };
       
       messages.value.push(assistantMessage);
       
-      const newHistory = [...currentHistory, assistantMessage];
+      // ✅ 使用纯净的 cleanHistory 构造新历史
+      const newHistory = [...cleanHistory, assistantMessage];
       
       await executeFetch(newHistory, assistantMessage, true);
     }
@@ -117,7 +122,7 @@ export function useChat(options: UseChatOptions) {
         body: JSON.stringify({ messages: historyToSend }),
         signal: abortController?.signal,
       });
-console.log('response',response)
+
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(`DeepSeek API Error: ${response.status} - ${errText}`);
@@ -151,10 +156,20 @@ console.log('response',response)
             // ✅ 打字机效果：逐字符处理 + renderKey 强制重绘
             if (delta.content) {
               const chars = delta.content.split('');
+              
               for (const char of chars) {
+                // 1. 追加到字符数组
+                if (!targetAssistantMsg._charArray) targetAssistantMsg._charArray = [];
+                targetAssistantMsg._charArray.push(char);
+                
+                // 2. 同步更新 content (为了兼容 markdown 渲染)
                 targetAssistantMsg.content += char;
-                targetAssistantMsg.renderKey = (targetAssistantMsg.renderKey || 0) + 1;
-                await new Promise(resolve => setTimeout(resolve, 16)); // 16ms ≈ 60fps
+                
+                // 3. 增加 tick
+                targetAssistantMsg._tick = (targetAssistantMsg._tick || 0) + 1;
+                
+                // 4. 强制等待
+                await new Promise(r => setTimeout(r, 20)); 
               }
             }
 
@@ -176,8 +191,7 @@ console.log('response',response)
                   tempToolArgs[tc.id] += tc.function.arguments;
                   try {
                     toolCall.args = JSON.parse(tempToolArgs[tc.id]);
-                    targetAssistantMsg.renderKey = (targetAssistantMsg.renderKey || 0) + 1; // 触发重绘
-                    await new Promise(resolve => setTimeout(resolve, 16));
+                    await new Promise(resolve => setTimeout(resolve,16));
                   } catch (e) {}
                 }
               }
