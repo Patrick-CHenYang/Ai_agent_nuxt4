@@ -155,7 +155,7 @@ function formatTime(timestamp: number): string {
       line-height: 1.5;
 
       .message-text {
-        white-space: pre-wrap;
+        // white-space: pre-wrap;
         word-break: break-word;
 
         :deep(h1),
