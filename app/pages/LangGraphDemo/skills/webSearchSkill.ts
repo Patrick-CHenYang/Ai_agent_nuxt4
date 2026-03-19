@@ -1,4 +1,4 @@
-import { Skill } from './baseSkill';
+import type { Skill } from './baseSkill';
 
 export function createWebSearchSkill(): Skill {
   return {
