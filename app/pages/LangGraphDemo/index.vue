@@ -220,22 +220,6 @@
             <div class="input-actions">
               <button 
                 class="btn btn-secondary" 
-                @click="sendMessageWithRAG"
-                :disabled="!userInput.trim() || isStreaming"
-                title="使用 RAG 回答"
-              >
-                📚
-              </button>
-              <button 
-                class="btn btn-secondary" 
-                @click="sendMessageWithSkills"
-                :disabled="!userInput.trim() || isStreaming"
-                title="使用 Skills 回答"
-              >
-                🛠️
-              </button>
-              <button 
-                class="btn btn-secondary" 
                 @click="clearInput"
                 :disabled="!userInput.trim()"
               >
