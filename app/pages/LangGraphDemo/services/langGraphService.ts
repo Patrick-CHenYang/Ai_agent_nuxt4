@@ -1,4 +1,6 @@
 import type { LangGraph, LangGraphExecuteRequest, LangGraphExecuteResponse, LangGraphStreamChunk } from '@/types';
+import { addDocuments, similaritySearch } from './vectorStoreService';
+import { getSkill } from './skillService';
 
 // 存储配置信息
 let config = {
@@ -129,6 +131,141 @@ export async function executeGraph(request: LangGraphExecuteRequest): Promise<La
     metadata: {
       model: config.model,
       timestamp: Date.now()
+    }
+  };
+}
+
+/**
+ * 执行包含 RAG 的 LangGraph 图
+ * @param request 执行请求
+ * @returns Promise<LangGraphExecuteResponse> 执行结果
+ */
+export async function executeGraphWithRAG(request: LangGraphExecuteRequest): Promise<LangGraphExecuteResponse> {
+  const graph = graphs[request.graphId];
+  if (!graph) {
+    throw new Error('Graph not found');
+  }
+
+  // 模拟添加一些文档
+  await addDocuments([
+    { id: '1', content: 'LangGraph 是一个用于构建复杂 AI 应用的框架' },
+    { id: '2', content: 'LangGraph 支持节点和边的定义' },
+    { id: '3', content: 'LangGraph 可以与 LLM 集成' }
+  ]);
+
+  // 检索相关文档
+  const relevantDocs = await similaritySearch(request.input.prompt || '');
+  const context = relevantDocs.map(doc => doc.content).join('\n');
+
+  // 构建增强的提示
+  const enhancedPrompt = `基于以下上下文回答问题：\n\n${context}\n\n问题：${request.input.prompt || ''}`;
+
+  // 调用 DeepSeek API
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'user', content: enhancedPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error?.message || 'Failed to execute RAG');
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+
+  return {
+    id: Date.now().toString(36),
+    output: {
+      content,
+      context,
+      relevantDocs
+    },
+    metadata: {
+      model: config.model,
+      timestamp: Date.now(),
+      rag: true
+    }
+  };
+}
+
+/**
+ * 执行包含 Skills 的 LangGraph 图
+ * @param request 执行请求
+ * @returns Promise<LangGraphExecuteResponse> 执行结果
+ */
+export async function executeGraphWithSkills(request: LangGraphExecuteRequest): Promise<LangGraphExecuteResponse> {
+  const graph = graphs[request.graphId];
+  if (!graph) {
+    throw new Error('Graph not found');
+  }
+
+  const skillName = request.input.skillName || 'webSearch';
+  const skill = getSkill(skillName);
+
+  if (!skill) {
+    throw new Error(`Skill ${skillName} not found`);
+  }
+
+  // 执行技能
+  const skillResult = await skill.execute({
+    question: request.input.prompt || '',
+    query: request.input.prompt || ''
+  });
+
+  // 构建增强的提示
+  const searchResultsText = skillResult.searchResults
+    .map((result: any) => `${result.title}: ${result.content}`)
+    .join('\n');
+
+  const enhancedPrompt = `基于以下搜索结果回答问题：\n\n${searchResultsText}\n\n问题：${request.input.prompt || ''}`;
+
+  // 调用 DeepSeek API
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'user', content: enhancedPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error?.message || 'Failed to execute with skills');
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+
+  return {
+    id: Date.now().toString(36),
+    output: {
+      content,
+      searchResults: skillResult.searchResults
+    },
+    metadata: {
+      model: config.model,
+      timestamp: Date.now(),
+      skill: skillName
     }
   };
 }
@@ -283,7 +420,10 @@ export const langGraphService = {
   getGraphs,
   createGraph,
   executeGraph,
+  executeGraphWithRAG,
+  executeGraphWithSkills,
   executeGraphStream,
   deleteGraph,
   generateId
 };
+

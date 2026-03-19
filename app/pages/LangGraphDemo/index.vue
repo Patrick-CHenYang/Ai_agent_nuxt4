@@ -26,6 +26,14 @@
             <span class="concept-icon stream-icon">~</span>
             <span>流式执行</span>
           </li>
+          <li @click="selectConcept('rag')">
+            <span class="concept-icon rag-icon">📚</span>
+            <span>RAG</span>
+          </li>
+          <li @click="selectConcept('skills')">
+            <span class="concept-icon skills-icon">🛠️</span>
+            <span>Skills</span>
+          </li>
         </ul>
       </div>
       
@@ -48,6 +56,14 @@
           <li @click="loadExample('translation')">
             <span class="example-icon">🌐</span>
             <span>翻译系统</span>
+          </li>
+          <li @click="loadExample('rag')">
+            <span class="example-icon">📚</span>
+            <span>RAG 问答</span>
+          </li>
+          <li @click="loadExample('skills')">
+            <span class="example-icon">🛠️</span>
+            <span>Skills 示例</span>
           </li>
         </ul>
       </div>
@@ -202,6 +218,22 @@
               :disabled="isStreaming"
             ></textarea>
             <div class="input-actions">
+              <button 
+                class="btn btn-secondary" 
+                @click="sendMessageWithRAG"
+                :disabled="!userInput.trim() || isStreaming"
+                title="使用 RAG 回答"
+              >
+                📚
+              </button>
+              <button 
+                class="btn btn-secondary" 
+                @click="sendMessageWithSkills"
+                :disabled="!userInput.trim() || isStreaming"
+                title="使用 Skills 回答"
+              >
+                🛠️
+              </button>
               <button 
                 class="btn btn-secondary" 
                 @click="clearInput"
@@ -540,6 +572,12 @@ function selectConcept(concept: string) {
     case 'streaming':
       conceptExplanation.value = `**流式执行** 允许 LangGraph 在执行过程中实时返回结果。\n\n流式执行的优势：\n- 实时反馈，无需等待整个流程完成\n- 更好的用户体验\n- 支持长时间运行的任务\n- 可以在执行过程中中断或调整`;
       break;
+    case 'rag':
+      conceptExplanation.value = `**RAG (Retrieval Augmented Generation)** 是一种增强语言模型能力的技术。\n\nRAG 的工作原理：\n- **检索**：从知识库中检索与用户问题相关的文档\n- **增强**：将检索到的文档作为上下文添加到提示中\n- **生成**：让语言模型基于增强的提示生成回答\n\nRAG 的优势：\n- 提供最新信息，不受模型训练数据的限制\n- 减少模型幻觉，提高回答的准确性\n- 可以引用来源，增强回答的可信度`;
+      break;
+    case 'skills':
+      conceptExplanation.value = `**Skills** 是 LangGraph 中可以调用的外部工具和服务。\n\nSkills 的特点：\n- **模块化**：每个技能都是独立的功能模块\n- **可扩展**：可以轻松添加新的技能\n- **灵活调用**：可以在图的不同节点中调用不同的技能\n\n常见的 Skills 类型：\n- **Web 搜索**：获取网络信息\n- **计算器**：执行数学计算\n- **数据库查询**：查询和操作数据库\n- **文件操作**：读写文件`;
+      break;
   }
   
   // 添加系统消息
@@ -575,6 +613,14 @@ function loadExample(example: string) {
     case 'translation':
       graphName = '问答系统';
       prompt = '将 "Hello, how are you?" 翻译成中文';
+      break;
+    case 'rag':
+      graphName = '问答系统';
+      prompt = 'LangGraph 有哪些特点？';
+      break;
+    case 'skills':
+      graphName = '问答系统';
+      prompt = 'LangGraph 如何与外部工具集成？';
       break;
   }
   
@@ -709,6 +755,148 @@ function stopStreaming() {
   scrollToBottom();
 }
 
+// 使用 RAG 发送消息
+async function sendMessageWithRAG() {
+  if (!userInput.value.trim() || !selectedGraph.value) return;
+  
+  const message = userInput.value.trim();
+  userInput.value = '';
+  
+  // 添加用户消息
+  messages.value.push({
+    id: generateId(),
+    role: 'user',
+    content: message,
+    timestamp: Date.now(),
+    status: 'sent'
+  });
+  // 滚动到聊天底部
+  scrollToBottom();
+  
+  // 开始执行
+  isStreaming.value = true;
+  streamingContent.value = '正在使用 RAG 检索相关信息...';
+  
+  try {
+    // 调用 RAG 执行
+    const result = await langGraphService.executeGraphWithRAG({
+      graphId: selectedGraph.value.id,
+      input: { prompt: message }
+    });
+    
+    isStreaming.value = false;
+    streamingContent.value = '';
+    
+    // 添加助手消息
+    messages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: result.output.content,
+      timestamp: Date.now(),
+      status: 'sent',
+      metadata: result.metadata
+    });
+    
+    // 保存消息历史
+    if (selectedGraph.value) {
+      messagesHistory.value[selectedGraph.value.id] = [...messages.value];
+      saveMessagesToStorage();
+    }
+    
+    // 滚动到聊天底部
+    scrollToBottom();
+  } catch (error) {
+    console.error('Failed to execute RAG:', error);
+    isStreaming.value = false;
+    streamingContent.value = '';
+    messages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: `RAG 执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      timestamp: Date.now(),
+      status: 'error'
+    });
+    // 保存消息历史
+    if (selectedGraph.value) {
+      messagesHistory.value[selectedGraph.value.id] = [...messages.value];
+      saveMessagesToStorage();
+    }
+    // 滚动到聊天底部
+    scrollToBottom();
+  }
+}
+
+// 使用 Skills 发送消息
+async function sendMessageWithSkills() {
+  if (!userInput.value.trim() || !selectedGraph.value) return;
+  
+  const message = userInput.value.trim();
+  userInput.value = '';
+  
+  // 添加用户消息
+  messages.value.push({
+    id: generateId(),
+    role: 'user',
+    content: message,
+    timestamp: Date.now(),
+    status: 'sent'
+  });
+  // 滚动到聊天底部
+  scrollToBottom();
+  
+  // 开始执行
+  isStreaming.value = true;
+  streamingContent.value = '正在使用 Skills 执行任务...';
+  
+  try {
+    // 调用 Skills 执行
+    const result = await langGraphService.executeGraphWithSkills({
+      graphId: selectedGraph.value.id,
+      input: { prompt: message, skillName: 'webSearch' }
+    });
+    
+    isStreaming.value = false;
+    streamingContent.value = '';
+    
+    // 添加助手消息
+    messages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: result.output.content,
+      timestamp: Date.now(),
+      status: 'sent',
+      metadata: result.metadata
+    });
+    
+    // 保存消息历史
+    if (selectedGraph.value) {
+      messagesHistory.value[selectedGraph.value.id] = [...messages.value];
+      saveMessagesToStorage();
+    }
+    
+    // 滚动到聊天底部
+    scrollToBottom();
+  } catch (error) {
+    console.error('Failed to execute with skills:', error);
+    isStreaming.value = false;
+    streamingContent.value = '';
+    messages.value.push({
+      id: generateId(),
+      role: 'assistant',
+      content: `Skills 执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      timestamp: Date.now(),
+      status: 'error'
+    });
+    // 保存消息历史
+    if (selectedGraph.value) {
+      messagesHistory.value[selectedGraph.value.id] = [...messages.value];
+      saveMessagesToStorage();
+    }
+    // 滚动到聊天底部
+    scrollToBottom();
+  }
+}
+
 // 清除输入
 function clearInput() {
   userInput.value = '';
@@ -832,13 +1020,13 @@ async function addGraph() {
 
 /* 左侧边栏 */
 .sidebar {
-  width: 320px;
+  width: 340px;
   background-color: white;
   border-right: 1px solid #e8e8e8;
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
-  max-height: 100vh;
+  height: 100vh;
   overflow-y: hidden;
   overflow-x: hidden;
 
@@ -856,11 +1044,13 @@ async function addGraph() {
   }
 
   .sidebar-section {
-    padding: 20px;
+    padding: 15px 20px;
     border-bottom: 1px solid #e8e8e8;
+    max-height: 200px;
+    overflow-y: auto;
 
     h3 {
-      margin: 0 0 15px 0;
+      margin: 0 0 10px 0;
       font-size: 14px;
       font-weight: 600;
       color: #333;
@@ -875,15 +1065,16 @@ async function addGraph() {
     li {
       display: flex;
       align-items: center;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border-radius: 6px;
       cursor: pointer;
       transition: all 0.3s ease;
+      font-size: 13px;
 
       &:hover {
         background-color: #f0f2f5;
-        transform: translateX(4px);
+        transform: translateX(3px);
       }
 
       &.active {
@@ -912,6 +1103,14 @@ async function addGraph() {
     &.stream-icon {
       color: #f5222d;
     }
+
+    &.rag-icon {
+      color: #722ed1;
+    }
+
+    &.skills-icon {
+      color: #13c2c2;
+    }
   }
 
   .example-icon {
@@ -922,11 +1121,12 @@ async function addGraph() {
   .graph-list-section {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 15px 20px;
     border-top: 1px solid #e8e8e8;
+    min-height: 300px;
 
     h3 {
-      margin: 0 0 15px 0;
+      margin: 0 0 12px 0;
       font-size: 14px;
       font-weight: 600;
       color: #333;
@@ -940,7 +1140,7 @@ async function addGraph() {
       li {
         display: flex;
         align-items: center;
-        padding: 10px 12px;
+        padding: 12px 14px;
         margin-bottom: 8px;
         border-radius: 8px;
         cursor: pointer;
@@ -964,6 +1164,7 @@ async function addGraph() {
 
           .graph-name {
             font-size: 14px;
+            font-weight: 500;
           }
 
           .graph-node-count {
@@ -973,19 +1174,19 @@ async function addGraph() {
         }
 
         .graph-delete-btn {
-          width: 20px;
-          height: 20px;
+          width: 22px;
+          height: 22px;
           border: none;
           border-radius: 50%;
           background-color: #ff4d4f;
           color: white;
-          font-size: 16px;
+          font-size: 18px;
           line-height: 1;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-left: 8px;
+          margin-left: 10px;
           transition: all 0.3s ease;
 
           &:hover {
