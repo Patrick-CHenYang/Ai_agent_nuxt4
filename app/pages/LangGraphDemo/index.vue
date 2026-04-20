@@ -3,12 +3,12 @@
     <!-- 左侧边栏 -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <h2>LangGraph Demo</h2>
+        <h2>Agent Demo</h2>
       </div>
       
-      <!-- LangGraph 概念 -->
+      <!-- Agent 概念 -->
       <div class="sidebar-section">
-        <h3>LangGraph 概念</h3>
+        <h3>Agent 概念</h3>
         <ul class="concept-list">
           <li @click="selectConcept('nodes')">
             <span class="concept-icon node-icon">○</span>
@@ -98,8 +98,8 @@
       <!-- 顶部导航 -->
       <div class="top-nav">
         <div class="nav-left">
-          <h1 v-if="selectedGraph">LangGraph: {{ selectedGraph.name }}</h1>
-          <h1 v-else>LangGraph Demo</h1>
+          <h1 v-if="selectedGraph">Agent: {{ selectedGraph.name }}</h1>
+          <h1 v-else>Agent Demo</h1>
         </div>
         <div class="nav-right">
           <button 
@@ -294,8 +294,8 @@ import type { LangGraph, ChatMessage as ChatMessageType } from '@/types';
 
 // 获取运行时配置
 const config = useRuntimeConfig();
-const apiKey = config.public.langGraphApiKey;
-const baseUrl = config.public.langGraphBaseUrl || 'https://api.langgraph.com';
+const apiKey = config.public.langGraphApiKey||'sk-f441c474a030417b9bc5a4ba573d915c';
+const baseUrl = config.public.langGraphBaseUrl || 'https://api.deepseek.com';
 
 // 状态管理
 const availableGraphs = ref<LangGraph[]>([]);
